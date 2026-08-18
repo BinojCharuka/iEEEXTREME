@@ -21,7 +21,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "IEEE Xtreme R10 | Sri Lanka Section",
+  title: "IEEEXtreme Region 10 | Asia Pacific",
   description:
     "R10-Xtreme: the Region 10 hub for IEEE Xtreme events, rules, and teams."
 };
