@@ -13,6 +13,7 @@ import {
   type R10LocationHub,
 } from "@/lib/r10Locations";
 import EventCard from "./EventCard";
+import Link from "next/link";
 
 const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
@@ -429,7 +430,9 @@ export default function WorldMapEvents({
                     </div>
 
                     <h4 className="font-display text-xs font-semibold text-text group-hover:text-signal transition-colors line-clamp-2">
-                      {ev.title}
+                      <Link href={`/events/${ev.id}`} className="hover:text-signal transition-colors">
+                        {ev.title}
+                      </Link>
                     </h4>
 
                     {(ev.studentBranch || ev.section) && (
@@ -451,19 +454,15 @@ export default function WorldMapEvents({
                       </div>
                     )}
 
-                    {ev.registerUrl && (
-                      <div className="mt-2.5 pt-2 border-t border-line/40 flex justify-end">
-                        <a
-                          href={ev.registerUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-signal px-2.5 py-1 font-mono text-[10px] font-bold text-void hover:bg-signalDim transition-colors"
-                        >
-                          <span>Register</span>
-                          <span>&rarr;</span>
-                        </a>
-                      </div>
-                    )}
+                    <div className="mt-2.5 pt-2 border-t border-line/40 flex justify-end">
+                      <Link
+                        href={`/events/${ev.id}`}
+                        className="inline-flex items-center gap-1 rounded-md bg-signal px-2.5 py-1 font-mono text-[10px] font-bold text-void hover:bg-signalDim transition-colors shadow-sm"
+                      >
+                        <span>View Details</span>
+                        <span>&rarr;</span>
+                      </Link>
+                    </div>
                   </div>
                 );
               })}

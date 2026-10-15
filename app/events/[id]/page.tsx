@@ -1,16 +1,17 @@
 import { notFound } from "next/navigation";
-import { fetchIEEEEvents } from "@/lib/vtools";
+import { fetchIEEEEvents, getEventById } from "@/lib/vtools";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
 
 export default async function EventPage({ params }: { params: { id: string } }) {
-  const events = await fetchIEEEEvents();
-  const event = events.find((e) => e.id === params.id);
+  const event = await getEventById(params.id);
 
   if (!event) {
     notFound();
   }
+
+  const events = await fetchIEEEEvents();
 
   const otherEvents = events.filter((e) => e.id !== params.id).slice(0, 3);
 

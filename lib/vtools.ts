@@ -245,8 +245,11 @@ export async function fetchIEEEEvents(): Promise<XtremeEvent[]> {
 }
 
 export async function getEventById(id: string): Promise<XtremeEvent | undefined> {
+  const cleanId = decodeURIComponent(id).trim();
   const events = await fetchIEEEEvents();
-  const match = events.find((e) => e.id === id);
+  let match = events.find((e) => e.id === cleanId || e.id === id);
   if (match) return match;
-  return OFFICIAL_R10_EVENTS.find((e) => e.id === id);
+  match = OFFICIAL_R10_EVENTS.find((e) => e.id === cleanId || e.id === id);
+  if (match) return match;
+  return VTOOLS_FALLBACK_EVENTS.find((e) => e.id === cleanId || e.id === id);
 }

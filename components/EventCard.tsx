@@ -20,7 +20,7 @@ export default function EventCard({ event }: { event: XtremeEvent }) {
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-panel transition-colors hover:border-signal/60">
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-line">
+      <Link href={`/events/${event.id}`} className="relative aspect-[16/9] w-full overflow-hidden bg-line block cursor-pointer">
         {event.photo ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -51,7 +51,7 @@ export default function EventCard({ event }: { event: XtremeEvent }) {
             </span>
           </div>
         )}
-      </div>
+      </Link>
 
       <div className="flex flex-1 flex-col gap-3 p-5">
         <h3 className="font-display text-lg font-bold leading-snug text-text">
@@ -85,20 +85,13 @@ export default function EventCard({ event }: { event: XtremeEvent }) {
         )}
 
         <div className="mt-auto pt-2">
-          {event.registerUrl ? (
-            <a
-              href={event.registerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block w-full rounded-full bg-signal py-2.5 text-center font-mono text-sm font-medium text-void transition-transform hover:scale-[1.02] shadow-sm"
-            >
-              Register now
-            </a>
-          ) : (
-            <span className="inline-block w-full rounded-full border border-line py-2.5 text-center font-mono text-sm text-muted">
-              Registration link unavailable
-            </span>
-          )}
+          <Link
+            href={`/events/${event.id}`}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-signal py-2.5 text-center font-mono text-sm font-bold text-void transition-all hover:bg-signalDim hover:shadow-md hover:shadow-signal/20 active:scale-[0.98]"
+          >
+            <span>View Event Details</span>
+            <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
+          </Link>
         </div>
       </div>
     </article>
