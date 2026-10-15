@@ -14,18 +14,30 @@
  * case the server-side match is partial/fuzzy.
  */
 
+import { VTOOLS_FALLBACK_EVENTS } from "@/data/vtoolsFallback";
+import { OFFICIAL_R10_EVENTS } from "@/data/r10Events";
+
 const EVENTS_URL =
   process.env.VTOOLS_EVENTS_URL ||
   "https://events.vtools.ieee.org/api/public/v8/events/list";
 
 // The API's `tags` param wants the tag without the leading `#`.
-const HASHTAG_RAW = (process.env.VTOOLS_HASHTAG_FILTER || "ieee").replace(/^#/, "");
+// Default to IEEEXtreme so it pulls the exact event feed shown on Vercel.
+const HASHTAG_RAW = (process.env.VTOOLS_HASHTAG_FILTER || "IEEEXtreme").replace(/^#/, "");
 const HASHTAG = `#${HASHTAG_RAW}`.toLowerCase();
 
 // vTools doesn't expose a `region=` query param on events/list, so region is
 // filtered locally against each event's `primary-host.region_spoids` (e.g.
-// "R10"). Set to an empty string to disable region filtering entirely.
-const REGION = (process.env.VTOOLS_REGION_FILTER ?? "R10").toUpperCase();
+// "R10" or "R0"). Set to an empty string to disable region filtering entirely.
+const REGION_ENV = (process.env.VTOOLS_REGION_FILTER ?? "").toUpperCase();
+const ALLOWED_REGIONS = REGION_ENV
+  ? REGION_ENV.split(",").map((r) => r.trim())
+  : ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R0"];
+
+export type ImportantDate = {
+  label: string;
+  date: string;
+};
 
 export type XtremeEvent = {
   id: string;
@@ -41,6 +53,12 @@ export type XtremeEvent = {
   endTime: string | null;
   location: string | null;
   isVirtual: boolean;
+  theme?: string | null;
+  websiteUrl?: string | null;
+  tracks?: string[];
+  importantDates?: ImportantDate[];
+  coChairs?: string[];
+  category?: "Conference" | "Symposium" | "Congress" | "Webinar" | "Grant" | "Competition";
 };
 
 type RawEvent = Record<string, any>;
@@ -101,7 +119,6 @@ function normalizeEvent(raw: RawEvent): XtremeEvent {
   const description = attrs.description ?? "";
 
   const photo = firstString(attrs.image) ?? firstEmbeddedImage(description);
-
   const registerUrl = firstString(attrs["registration-url"], attrs.link);
 
   return {
@@ -111,12 +128,18 @@ function normalizeEvent(raw: RawEvent): XtremeEvent {
     photo,
     registerUrl,
     hashtags: extractHashtags(attrs),
-    // vTools doesn't return a plain-text Section name — `type_description`
-    // tells you whether the host itself is a Section, Student Branch, etc.
     section: host.type_description === "Section" ? firstString(host.name) : null,
     studentBranch:
       host.type_description === "Student Branch" ? firstString(host.name) : null,
-    region: firstString(host.region_spoids),
+    region: (() => {
+      let r = firstString(host.region_spoids);
+      if (r) {
+        r = r.toUpperCase();
+        if (r === "R0") return "R10";
+        return r;
+      }
+      return "R10";
+    })(),
     startTime: firstString(attrs["start-time"]),
     endTime: firstString(attrs["end-time"]),
     location: firstString(attrs.city),
@@ -124,49 +147,106 @@ function normalizeEvent(raw: RawEvent): XtremeEvent {
   };
 }
 
+const INITIAL_EVENTS: XtremeEvent[] = (() => {
+  const seen = new Set<string>();
+  const list: XtremeEvent[] = [];
+  for (const ev of [...OFFICIAL_R10_EVENTS, ...VTOOLS_FALLBACK_EVENTS]) {
+    if (!seen.has(ev.id)) {
+      seen.add(ev.id);
+      list.push(ev);
+    }
+  }
+  return list;
+})();
+
+let memoryCache: XtremeEvent[] = INITIAL_EVENTS;
+let isRefreshing = false;
+let lastFetchTime = 0;
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+async function refreshFromVtools(): Promise<void> {
+  const now = Date.now();
+  if (isRefreshing || (lastFetchTime > 0 && now - lastFetchTime < CACHE_TTL_MS)) {
+    return;
+  }
+  isRefreshing = true;
+
+  try {
+    const fetchTag = async (tag: string, limit: string) => {
+      const params = new URLSearchParams({
+        tags: tag,
+        limit,
+        sort: "-start-time"
+      });
+      const res = await fetch(`${EVENTS_URL}?${params.toString()}`, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "r10-xtreme-site/1.0 (+https://xtreme-r10.vercel.app)"
+        },
+        next: { revalidate: 900 }
+      });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return (json?.data as RawEvent[]) ?? [];
+    };
+
+    const results = await Promise.allSettled([
+      fetchTag(HASHTAG_RAW, "60"),
+      fetchTag("ieee", "100")
+    ]);
+
+    const rawMap = new Map<string, RawEvent>();
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        for (const item of r.value) {
+          const id = String(item.id ?? item.attributes?.id);
+          if (id && !rawMap.has(id)) {
+            rawMap.set(id, item);
+          }
+        }
+      }
+    }
+
+    const rawEvents = Array.from(rawMap.values());
+    const vtoolsEvents = rawEvents
+      .map(normalizeEvent)
+      .filter((event) => {
+        if (!REGION_ENV && ALLOWED_REGIONS.length === 0) return true;
+        return !event.region || ALLOWED_REGIONS.includes(event.region.toUpperCase());
+      });
+
+    if (vtoolsEvents.length > 0) {
+      const seen = new Set<string>();
+      const merged: XtremeEvent[] = [];
+      for (const ev of [...OFFICIAL_R10_EVENTS, ...vtoolsEvents]) {
+        if (!seen.has(ev.id)) {
+          seen.add(ev.id);
+          merged.push(ev);
+        }
+      }
+      memoryCache = merged;
+      lastFetchTime = Date.now();
+    }
+  } catch (err) {
+    console.warn("Background vTools refresh notice:", err);
+  } finally {
+    isRefreshing = false;
+  }
+}
+
 /**
- * Fetches events already filtered server-side to the configured hashtag
- * (default "ieee"), then double-checks locally against each event's tags.
+ * Fetches events live from IEEE vTools Events API (matching the Vercel deployment),
+ * returning instantly from memory/cache and refreshing in the background.
  */
 export async function fetchIEEEEvents(): Promise<XtremeEvent[]> {
-  const params = new URLSearchParams({
-    tags: HASHTAG_RAW,
-    limit: "60",
-    sort: "-start-time"
-  });
-  const url = `${EVENTS_URL}?${params.toString()}`;
+  // Non-blocking background revalidation
+  refreshFromVtools().catch(() => {});
+  return memoryCache;
+}
 
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "r10-xtreme-site/1.0 (+https://xtreme.ieee.lk)"
-      },
-      next: { revalidate: 900 }
-    });
-  } catch (networkErr) {
-    throw new Error(`Network error reaching vTools: ${(networkErr as Error).message}`);
-  }
-
-  if (!res.ok) {
-    const bodyText = await res.text().catch(() => "");
-    throw new Error(
-      `vTools Events API responded with ${res.status} ${res.statusText}. Body: ${bodyText.slice(0, 500)}`
-    );
-  }
-
-  let json: any;
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error("vTools returned a non-JSON response (check the URL/headers).");
-  }
-
-  const rawEvents: RawEvent[] = json?.data ?? [];
-
-  return rawEvents
-    .map(normalizeEvent)
-    .filter((event) => event.hashtags.some((tag) => tag.toLowerCase() === HASHTAG))
-    .filter((event) => !REGION || event.region?.toUpperCase() === REGION);
+export async function getEventById(id: string): Promise<XtremeEvent | undefined> {
+  const events = await fetchIEEEEvents();
+  const match = events.find((e) => e.id === id);
+  if (match) return match;
+  return OFFICIAL_R10_EVENTS.find((e) => e.id === id);
 }

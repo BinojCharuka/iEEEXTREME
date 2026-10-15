@@ -4,6 +4,13 @@
 
 html {
   scroll-behavior: smooth;
+  background-color: #0A0908;
+  color: #F3EFE9;
+}
+
+body {
+  background-color: #0A0908;
+  color: #F3EFE9;
 }
 
 ::selection {
