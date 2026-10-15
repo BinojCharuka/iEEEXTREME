@@ -200,7 +200,7 @@ export default function WorldMapEvents({
       </div>
 
       {/* Map Graphic Container with Floating Details Card */}
-      <div className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden bg-panel/70 border border-line/70">
+      <div className="relative aspect-[4/3] sm:aspect-[16/9] md:aspect-[2/1] min-h-[300px] sm:min-h-0 w-full rounded-2xl overflow-hidden bg-panel/70 border border-line/70">
         <ComposableMap
           projection="geoMercator"
           projectionConfig={projectionConfig}
@@ -352,14 +352,14 @@ export default function WorldMapEvents({
           })}
         </ComposableMap>
 
-        {/* Floating Region Details Card (latched open on pin click) */}
+        {/* Floating Region Details Card (DESKTOP ONLY: latched open on pin click) */}
         {inspectHub && inspectEvents.length > 0 && (
           <div
-            className={`absolute top-4 ${
+            className={`hidden sm:flex absolute top-4 ${
               inspectHub.id === "LK" || inspectHub.id === "IN"
                 ? "right-4"
                 : "left-4"
-            } z-20 w-[92%] sm:w-[380px] max-h-[85%] rounded-2xl border border-signal/40 bg-void/95 p-4 backdrop-blur-xl shadow-2xl flex flex-col transition-all duration-200 animate-in fade-in zoom-in-95`}
+            } z-20 w-[380px] max-h-[85%] rounded-2xl border border-signal/40 bg-void/95 p-4 backdrop-blur-xl shadow-2xl flex-col transition-all duration-200 animate-in fade-in zoom-in-95`}
           >
             {/* Card Header */}
             <div className="flex items-start justify-between pb-3 border-b border-line/70 gap-2">
@@ -473,6 +473,8 @@ export default function WorldMapEvents({
                     onClick={() => {
                       onSelectRegion?.(inspectHub.id);
                       setActiveCardHubId(inspectHub.id);
+                      const el = document.getElementById("selected-events-grid");
+                      el?.scrollIntoView({ behavior: "smooth" });
                     }}
                     className="font-mono text-[11px] text-signal underline hover:text-signalDim"
                   >
@@ -485,8 +487,146 @@ export default function WorldMapEvents({
         )}
       </div>
 
+      {/* MOBILE ONLY: Interactive Bottom Sheet Modal for Region Details */}
+      {inspectHub && inspectEvents.length > 0 && (
+        <>
+          {/* Backdrop for mobile */}
+          <div
+            className="fixed inset-0 bg-void/80 backdrop-blur-sm z-40 sm:hidden animate-in fade-in duration-200"
+            onClick={() => {
+              setActiveCardHubId(null);
+            }}
+          />
+
+          {/* Bottom Sheet Modal */}
+          <div className="fixed inset-x-3 bottom-3 z-50 max-h-[82vh] rounded-3xl border border-signal/50 bg-void/98 p-4 backdrop-blur-2xl shadow-2xl sm:hidden flex flex-col animate-in slide-in-from-bottom duration-200">
+            {/* Grab Handle */}
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-line" />
+
+            {/* Mobile Card Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-line/70 gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">{inspectHub.flag}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-signal font-semibold truncate">
+                    {inspectHub.sectionName}
+                  </span>
+                </div>
+                <h3 className="font-display font-bold text-base text-text mt-0.5 truncate">
+                  {inspectHub.name}
+                </h3>
+                <p className="font-mono text-[11px] text-muted mt-0.5">
+                  {inspectEvents.length} #IEEEXtreme event{inspectEvents.length === 1 ? "" : "s"}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => {
+                    onSelectRegion?.(inspectHub.id);
+                    setActiveCardHubId(null);
+                    const el = document.getElementById("selected-events-grid");
+                    el?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="rounded-lg bg-signal/15 border border-signal/40 px-2.5 py-1.5 font-mono text-[11px] text-signal font-semibold hover:bg-signal hover:text-void transition-colors"
+                >
+                  View Below ↓
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveCardHubId(null);
+                    setHoveredHubId(null);
+                  }}
+                  className="rounded-lg border border-line bg-panel p-1.5 text-muted hover:text-text transition-colors"
+                  aria-label="Close"
+                >
+                  <span className="block w-4 h-4 text-center leading-4 text-xs">✕</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Event List in Mobile Bottom Sheet */}
+            <div className="mt-3 flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar">
+              {inspectEvents.map((ev) => {
+                const formattedDate = ev.startTime
+                  ? new Date(ev.startTime).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : "Date TBD";
+
+                return (
+                  <div
+                    key={ev.id}
+                    className="group rounded-xl border border-line/70 bg-panel/70 p-3 hover:border-signal/50 hover:bg-panel transition-all"
+                  >
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted mb-1">
+                      <span className="rounded bg-signal/10 px-1.5 py-0.5 text-signal font-semibold">
+                        📅 {formattedDate}
+                      </span>
+                      <span>{ev.isVirtual ? "🌐 Virtual" : ev.location || "On-site"}</span>
+                    </div>
+
+                    <h4 className="font-display text-xs font-semibold text-text group-hover:text-signal transition-colors line-clamp-2">
+                      <Link href={`/events/${ev.id}`} className="hover:text-signal transition-colors">
+                        {ev.title}
+                      </Link>
+                    </h4>
+
+                    {(ev.studentBranch || ev.section) && (
+                      <p className="font-mono text-[10px] text-muted/90 mt-1 line-clamp-1">
+                        🏛️ {ev.studentBranch || ev.section}
+                      </p>
+                    )}
+
+                    {ev.hashtags && ev.hashtags.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {ev.hashtags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded bg-line/60 px-1.5 py-0.2 font-mono text-[9px] text-muted"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-2.5 pt-2 border-t border-line/40 flex justify-end">
+                      <Link
+                        href={`/events/${ev.id}`}
+                        className="inline-flex items-center gap-1 rounded-md bg-signal px-2.5 py-1 font-mono text-[10px] font-bold text-void hover:bg-signalDim transition-colors shadow-sm"
+                      >
+                        <span>View Details</span>
+                        <span>&rarr;</span>
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom action bar */}
+            <div className="mt-3 pt-2.5 border-t border-line/60">
+              <button
+                onClick={() => {
+                  onSelectRegion?.(inspectHub.id);
+                  setActiveCardHubId(null);
+                  const el = document.getElementById("selected-events-grid");
+                  el?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="w-full rounded-xl bg-signal py-2.5 font-mono text-xs font-bold text-void hover:bg-signalDim transition-all shadow-md text-center"
+              >
+                Scroll to {inspectEvents.length} events in grid below ↓
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Region Events Grid Below Map */}
-      <div className="mt-8 border-t border-line/60 pt-6">
+      <div id="selected-events-grid" className="mt-8 border-t border-line/60 pt-6">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs text-signal font-semibold">📍</span>
