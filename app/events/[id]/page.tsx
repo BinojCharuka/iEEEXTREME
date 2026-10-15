@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { fetchIEEEEvents, getEventById } from "@/lib/vtools";
+import { filterR10IeeeXtremeEvents } from "@/lib/r10Locations";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
@@ -11,9 +12,9 @@ export default async function EventPage({ params }: { params: { id: string } }) 
     notFound();
   }
 
-  const events = await fetchIEEEEvents();
-
-  const otherEvents = events.filter((e) => e.id !== params.id).slice(0, 3);
+  const allEvents = await fetchIEEEEvents();
+  const r10XtremeEvents = filterR10IeeeXtremeEvents(allEvents);
+  const otherEvents = r10XtremeEvents.filter((e) => e.id !== params.id).slice(0, 3);
 
   const formatDate = (value: string | null) => {
     if (!value) return null;
@@ -275,26 +276,69 @@ export default async function EventPage({ params }: { params: { id: string } }) 
             </div>
           </article>
 
-          {/* Other Region 10 Events Recommendation */}
+          {/* Other Region 10 IEEEXtreme Events Recommendation */}
           {otherEvents.length > 0 && (
             <div className="mt-16 border-t border-line/60 pt-12">
-              <h3 className="font-display text-2xl font-bold text-text mb-6">
-                Explore More IEEE Region 10 Events
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-xs uppercase tracking-wider text-signal font-semibold">
+                      IEEE Region 10
+                    </span>
+                    <span className="rounded-full bg-signal/15 border border-signal/40 px-2.5 py-0.5 font-mono text-[10px] text-signal font-bold uppercase tracking-wider">
+                      🏷️ #IEEEXtreme
+                    </span>
+                  </div>
+                  <h3 className="font-display text-2xl font-bold text-text md:text-3xl">
+                    Explore More #IEEEXtreme Events in Region 10
+                  </h3>
+                </div>
+                <Link
+                  href="/#events"
+                  className="font-mono text-xs text-signal underline hover:text-signalDim shrink-0"
+                >
+                  View Live World Map &rarr;
+                </Link>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {otherEvents.map((oe) => (
                   <Link
                     key={oe.id}
                     href={`/events/${oe.id}`}
-                    className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-panel p-5 transition-all hover:border-signal/60 hover:shadow-xl"
+                    className="group flex flex-col overflow-hidden rounded-2xl border border-line bg-panel p-5 transition-all hover:border-signal/60 hover:shadow-xl hover:-translate-y-0.5"
                   >
-                    <span className="font-mono text-[10px] text-signal font-bold uppercase tracking-wider mb-2">
-                      {oe.category ?? "IEEE R10"} · {oe.location ?? "Asia-Pacific"}
-                    </span>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted mb-2">
+                      <span className="rounded bg-signal/15 border border-signal/30 px-2 py-0.5 text-signal font-semibold">
+                        📅 {oe.startTime ? formatDate(oe.startTime) : "Date TBD"}
+                      </span>
+                      <span>{oe.isVirtual ? "🌐 Virtual" : oe.location || "On-site"}</span>
+                    </div>
+
                     <h4 className="font-display text-base font-bold text-text group-hover:text-signal transition-colors mb-2 line-clamp-2">
                       {oe.title}
                     </h4>
-                    <p className="font-mono text-xs text-muted mt-auto pt-2 flex items-center justify-between">
+
+                    {(oe.studentBranch || oe.section) && (
+                      <p className="font-mono text-[11px] text-muted mb-3 line-clamp-1">
+                        🏛️ {oe.studentBranch || oe.section}
+                      </p>
+                    )}
+
+                    {oe.hashtags && oe.hashtags.length > 0 && (
+                      <div className="mt-auto mb-3 flex flex-wrap gap-1">
+                        {oe.hashtags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded bg-line/60 px-1.5 py-0.5 font-mono text-[9px] text-muted"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="font-mono text-xs text-signal font-bold pt-3 border-t border-line/40 flex items-center justify-between group-hover:text-signalDim">
                       <span>View Details</span>
                       <span className="group-hover:translate-x-1 transition-transform">&rarr;</span>
                     </p>
