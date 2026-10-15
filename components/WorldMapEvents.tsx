@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
 import type { XtremeEvent } from "@/lib/vtools";
 import {
   filterR10Events,
@@ -30,10 +30,15 @@ export default function WorldMapEvents({
   selectedRegion,
   onSelectRegion,
 }: WorldMapEventsProps) {
-  // Region card popup state
-  const [activeCardHubId, setActiveCardHubId] = useState<string | null>(null);
+  // Region card popup state - independent of selectedRegion filter
+  const [inspectedHubId, setInspectedHubId] = useState<string | null>(null);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [hoveredHubId, setHoveredHubId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<MapDateFilter>("all");
+
+  // Interactive zoom & center state for Region 10
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([105, -2]);
 
   const nowTime = useMemo(() => Date.now(), []);
 
@@ -89,13 +94,9 @@ export default function WorldMapEvents({
     };
   }, [filteredMapEvents]);
 
-  // Find currently active hub for popup card and filter
-  const inspectHubId =
-    activeCardHubId ||
-    (selectedRegion && eventsByHubId[selectedRegion] ? selectedRegion : null);
-
-  const inspectHub = inspectHubId ? hubsById[inspectHubId] : null;
-  const inspectEvents = inspectHubId ? eventsByHubId[inspectHubId] || [] : [];
+  // Dedicated inspect hub (opens on pin click, closes on dismiss)
+  const inspectHub = inspectedHubId ? hubsById[inspectedHubId] : null;
+  const inspectEvents = inspectedHubId ? eventsByHubId[inspectedHubId] || [] : [];
 
   // Events to display in grid below map: either selected hub or all filtered Region 10 events
   const displayedEvents = useMemo(() => {
@@ -106,17 +107,33 @@ export default function WorldMapEvents({
   }, [selectedRegion, eventsByHubId, filteredMapEvents]);
 
   const handleSelectMarker = (hubId: string) => {
-    if (activeCardHubId === hubId && selectedRegion === hubId) {
-      setActiveCardHubId(null);
-      onSelectRegion?.(null);
-    } else {
-      setActiveCardHubId(hubId);
-      onSelectRegion?.(hubId);
-    }
+    setInspectedHubId(hubId);
+    setIsMobileDrawerOpen(true);
+    onSelectRegion?.(hubId);
   };
 
-  // Permanent Region 10 (Asia-Pacific) projection configuration
-  const projectionConfig = { scale: 260, center: [95, 12] as [number, number] };
+  const handleCloseInspect = () => {
+    setInspectedHubId(null);
+    setIsMobileDrawerOpen(false);
+    setHoveredHubId(null);
+  };
+
+  const handleViewBelow = (hubId: string) => {
+    onSelectRegion?.(hubId);
+    handleCloseInspect();
+    const el = document.getElementById("selected-events-grid");
+    el?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleZoomIn = () => setMapZoom((z) => Math.min(z * 1.35, 4));
+  const handleZoomOut = () => setMapZoom((z) => Math.max(z / 1.35, 0.75));
+  const handleResetZoom = () => {
+    setMapZoom(1);
+    setMapCenter([105, -2]);
+  };
+
+  // Region 10 (Asia-Pacific) projection configuration - framed so all active countries fit
+  const projectionConfig = { scale: 340, center: [105, -2] as [number, number] };
 
   return (
     <div className="relative w-full max-w-6xl mx-auto rounded-3xl overflow-hidden bg-void border border-line p-4 md:p-8 shadow-2xl">
@@ -188,7 +205,7 @@ export default function WorldMapEvents({
             <button
               onClick={() => {
                 onSelectRegion?.(null);
-                setActiveCardHubId(null);
+                handleCloseInspect();
               }}
               className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-signal/40 bg-signal/10 px-3 py-1.5 font-mono text-xs text-signal hover:bg-signal hover:text-void transition-all shadow-md shadow-signal/10 shrink-0"
             >
@@ -199,161 +216,204 @@ export default function WorldMapEvents({
         </div>
       </div>
 
-      {/* Map Graphic Container with Floating Details Card */}
-      <div className="relative aspect-[4/3] sm:aspect-[16/9] md:aspect-[2/1] min-h-[300px] sm:min-h-0 w-full rounded-2xl overflow-hidden bg-panel/70 border border-line/70">
+      {/* Map Graphic Container with Floating Details Card & Zoom Controls */}
+      <div className="relative aspect-[4/3] sm:aspect-[16/9] md:aspect-[2/1] min-h-[340px] sm:min-h-0 w-full rounded-2xl overflow-hidden bg-panel/70 border border-line/70">
+        {/* Floating Zoom & Pan Controls (Mobile + Desktop) */}
+        <div className="absolute top-3 right-3 z-10 flex flex-col items-center gap-1.5 rounded-xl border border-line/80 bg-void/90 p-1.5 backdrop-blur-md shadow-lg">
+          <button
+            type="button"
+            onClick={handleZoomIn}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-panel text-base font-bold text-text hover:bg-signal hover:text-void active:scale-95 transition-all shadow-sm"
+            title="Zoom In"
+            aria-label="Zoom in map"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={handleZoomOut}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-panel text-base font-bold text-text hover:bg-signal hover:text-void active:scale-95 transition-all shadow-sm"
+            title="Zoom Out"
+            aria-label="Zoom out map"
+          >
+            &minus;
+          </button>
+          <button
+            type="button"
+            onClick={handleResetZoom}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-panel text-xs text-muted hover:bg-signal hover:text-void active:scale-95 transition-all shadow-sm"
+            title="Reset Map View"
+            aria-label="Reset map zoom"
+          >
+            🎯
+          </button>
+        </div>
+
         <ComposableMap
           projection="geoMercator"
           projectionConfig={projectionConfig}
+          className="w-full h-full"
         >
-          <Geographies geography={geoUrl}>
-            {({ geographies }) =>
-              geographies.map((geo) => {
-                const countryName = geo.properties?.name || "";
-                const isR10Country = R10_COUNTRY_NAMES.has(countryName);
+          <ZoomableGroup
+            center={mapCenter}
+            zoom={mapZoom}
+            minZoom={0.7}
+            maxZoom={4}
+            onMoveEnd={(pos) => {
+              if (pos.coordinates) setMapCenter(pos.coordinates);
+              if (pos.zoom) setMapZoom(pos.zoom);
+            }}
+          >
+            <Geographies geography={geoUrl}>
+              {({ geographies }) =>
+                geographies.map((geo) => {
+                  const countryName = geo.properties?.name || "";
+                  const isR10Country = R10_COUNTRY_NAMES.has(countryName);
 
-                return (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill={isR10Country ? "#1c1813" : "#0e0e0e"}
-                    stroke={isR10Country ? "#FF7A00" : "#222222"}
-                    strokeWidth={isR10Country ? 0.75 : 0.4}
-                    strokeOpacity={isR10Country ? 0.4 : 0.6}
-                    style={{
-                      default: { outline: "none" },
-                      hover: {
-                        outline: "none",
-                        fill: isR10Country ? "#2a2219" : "#161616",
-                      },
-                      pressed: { outline: "none" },
-                    } as any}
-                  />
-                );
-              })
-            }
-          </Geographies>
+                  return (
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill={isR10Country ? "#1c1813" : "#0e0e0e"}
+                      stroke={isR10Country ? "#FF7A00" : "#222222"}
+                      strokeWidth={isR10Country ? 0.75 : 0.4}
+                      strokeOpacity={isR10Country ? 0.4 : 0.6}
+                      style={{
+                        default: { outline: "none" },
+                        hover: {
+                          outline: "none",
+                          fill: isR10Country ? "#2a2219" : "#161616",
+                        },
+                        pressed: { outline: "none" },
+                      } as any}
+                    />
+                  );
+                })
+              }
+            </Geographies>
 
-          {activeHubs.map((hub) => {
-            const isSelected =
-              selectedRegion === hub.id || activeCardHubId === hub.id;
-            const isHovered = hoveredHubId === hub.id;
-            const count = eventsByHubId[hub.id]?.length || 0;
+            {activeHubs.map((hub) => {
+              const isSelected =
+                selectedRegion === hub.id || inspectedHubId === hub.id;
+              const isHovered = hoveredHubId === hub.id;
+              const count = eventsByHubId[hub.id]?.length || 0;
 
-            return (
-              <Marker
-                key={hub.id}
-                coordinates={hub.coordinates}
-                onClick={() => handleSelectMarker(hub.id)}
-                onMouseEnter={() => setHoveredHubId(hub.id)}
-                onMouseLeave={() => setHoveredHubId(null)}
-                className="cursor-pointer outline-none"
-              >
-                {/* 1. Large transparent hitbox for smooth, reliable hovering */}
-                <circle r={26} fill="transparent" className="cursor-pointer" />
-
-                {/* 2. Pulse ring for active/selected markers */}
-                <circle
-                  r={isSelected ? 26 : isHovered ? 22 : 18}
-                  fill="none"
-                  stroke="#FF7A00"
-                  strokeWidth={isSelected ? 2.5 : 1.5}
-                  style={{ pointerEvents: "none" }}
-                  className={`${
-                    isSelected
-                      ? "animate-ping opacity-60"
-                      : isHovered
-                      ? "opacity-80"
-                      : "animate-pulse opacity-40"
-                  }`}
-                />
-
-                {/* 3. Main pin circle with signal styling */}
-                <circle
-                  r={isSelected ? 18 : isHovered ? 16 : 13}
-                  fill={isSelected ? "#FF7A00" : isHovered ? "#FF881A" : "#EA580C"}
-                  stroke="#000"
-                  strokeWidth={2}
-                  style={{ pointerEvents: "none" }}
-                  className="shadow-lg transition-all duration-150"
-                />
-
-                {/* 4. Flag or Hub ID text */}
-                <text
-                  textAnchor="middle"
-                  y={4}
-                  style={{
-                    fontFamily: "monospace",
-                    fontSize: isHovered ? "11px" : "10px",
-                    fill: "#000",
-                    fontWeight: "bold",
-                    pointerEvents: "none",
-                    userSelect: "none",
-                  }}
+              return (
+                <Marker
+                  key={hub.id}
+                  coordinates={hub.coordinates}
+                  onClick={() => handleSelectMarker(hub.id)}
+                  onMouseEnter={() => setHoveredHubId(hub.id)}
+                  onMouseLeave={() => setHoveredHubId(null)}
+                  className="cursor-pointer outline-none"
                 >
-                  {hub.id === "R10_HUB" ? "R10" : hub.id}
-                </text>
+                  {/* 1. Large transparent hitbox for smooth, reliable hovering */}
+                  <circle r={26} fill="transparent" className="cursor-pointer" />
 
-                {/* 5. Count badge pill */}
-                <g transform="translate(11, -12)" style={{ pointerEvents: "none" }}>
-                  <rect
-                    width={20}
-                    height={15}
-                    rx={7.5}
-                    fill="#0A0A0A"
+                  {/* 2. Pulse ring for active/selected markers */}
+                  <circle
+                    r={isSelected ? 26 : isHovered ? 22 : 18}
+                    fill="none"
                     stroke="#FF7A00"
-                    strokeWidth={1.5}
+                    strokeWidth={isSelected ? 2.5 : 1.5}
+                    style={{ pointerEvents: "none" }}
+                    className={`${
+                      isSelected
+                        ? "animate-ping opacity-60"
+                        : isHovered
+                        ? "opacity-80"
+                        : "animate-pulse opacity-40"
+                    }`}
                   />
+
+                  {/* 3. Main pin circle with signal styling */}
+                  <circle
+                    r={isSelected ? 18 : isHovered ? 16 : 13}
+                    fill={isSelected ? "#FF7A00" : isHovered ? "#FF881A" : "#EA580C"}
+                    stroke="#000"
+                    strokeWidth={2}
+                    style={{ pointerEvents: "none" }}
+                    className="shadow-lg transition-all duration-150"
+                  />
+
+                  {/* 4. Flag or Hub ID text */}
                   <text
-                    x={10}
-                    y={11}
                     textAnchor="middle"
-                    fill="#FF7A00"
+                    y={4}
                     style={{
                       fontFamily: "monospace",
-                      fontSize: "9px",
+                      fontSize: isHovered ? "11px" : "10px",
+                      fill: "#000",
                       fontWeight: "bold",
+                      pointerEvents: "none",
+                      userSelect: "none",
                     }}
                   >
-                    {count}
+                    {hub.id === "R10_HUB" ? "R10" : hub.id}
                   </text>
-                </g>
 
-                {/* 6. Lightweight Hover Tooltip Pill */}
-                {isHovered && !isSelected && (
-                  <g transform="translate(0, -28)" style={{ pointerEvents: "none" }}>
+                  {/* 5. Count badge pill */}
+                  <g transform="translate(11, -12)" style={{ pointerEvents: "none" }}>
                     <rect
-                      x={-80}
-                      y={-12}
-                      width={160}
-                      height={22}
-                      rx={6}
+                      width={20}
+                      height={15}
+                      rx={7.5}
                       fill="#0A0A0A"
                       stroke="#FF7A00"
-                      strokeWidth={1}
-                      opacity={0.96}
+                      strokeWidth={1.5}
                     />
                     <text
-                      x={0}
-                      y={3}
+                      x={10}
+                      y={11}
                       textAnchor="middle"
-                      fill="#FFF"
+                      fill="#FF7A00"
                       style={{
                         fontFamily: "monospace",
-                        fontSize: "10px",
-                        fontWeight: "600",
+                        fontSize: "9px",
+                        fontWeight: "bold",
                       }}
                     >
-                      {hub.flag} {hub.name} · {count} #IEEEXtreme Events
+                      {count}
                     </text>
                   </g>
-                )}
-              </Marker>
-            );
-          })}
+
+                  {/* 6. Lightweight Hover Tooltip Pill */}
+                  {isHovered && !isSelected && (
+                    <g transform="translate(0, -28)" style={{ pointerEvents: "none" }}>
+                      <rect
+                        x={-80}
+                        y={-12}
+                        width={160}
+                        height={22}
+                        rx={6}
+                        fill="#0A0A0A"
+                        stroke="#FF7A00"
+                        strokeWidth={1}
+                        opacity={0.96}
+                      />
+                      <text
+                        x={0}
+                        y={3}
+                        textAnchor="middle"
+                        fill="#FFF"
+                        style={{
+                          fontFamily: "monospace",
+                          fontSize: "10px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {hub.flag} {hub.name} · {count} #IEEEXtreme Events
+                      </text>
+                    </g>
+                  )}
+                </Marker>
+              );
+            })}
+          </ZoomableGroup>
         </ComposableMap>
 
         {/* Floating Region Details Card (DESKTOP ONLY: latched open on pin click) */}
-        {inspectHub && inspectEvents.length > 0 && (
+        {inspectedHubId && inspectHub && inspectEvents.length > 0 && (
           <div
             className={`hidden sm:flex absolute top-4 ${
               inspectHub.id === "LK" || inspectHub.id === "IN"
@@ -380,10 +440,8 @@ export default function WorldMapEvents({
 
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => {
-                    onSelectRegion?.(inspectHub.id);
-                    setActiveCardHubId(inspectHub.id);
-                  }}
+                  type="button"
+                  onClick={() => onSelectRegion?.(inspectHub.id)}
                   className={`rounded-lg px-2 py-1 font-mono text-[10px] font-semibold transition-colors ${
                     selectedRegion === inspectHub.id
                       ? "bg-signal text-void font-bold"
@@ -394,10 +452,8 @@ export default function WorldMapEvents({
                   {selectedRegion === inspectHub.id ? "Filtered ✓" : "Filter"}
                 </button>
                 <button
-                  onClick={() => {
-                    setActiveCardHubId(null);
-                    setHoveredHubId(null);
-                  }}
+                  type="button"
+                  onClick={handleCloseInspect}
                   className="rounded-lg border border-line bg-panel p-1 text-muted hover:text-text hover:bg-void/60 transition-colors"
                   title="Close card"
                 >
@@ -470,12 +526,8 @@ export default function WorldMapEvents({
               {inspectEvents.length > 5 && (
                 <div className="pt-1 text-center">
                   <button
-                    onClick={() => {
-                      onSelectRegion?.(inspectHub.id);
-                      setActiveCardHubId(inspectHub.id);
-                      const el = document.getElementById("selected-events-grid");
-                      el?.scrollIntoView({ behavior: "smooth" });
-                    }}
+                    type="button"
+                    onClick={() => handleViewBelow(inspectHub.id)}
                     className="font-mono text-[11px] text-signal underline hover:text-signalDim"
                   >
                     +{inspectEvents.length - 5} more events · View all below &darr;
@@ -488,14 +540,12 @@ export default function WorldMapEvents({
       </div>
 
       {/* MOBILE ONLY: Interactive Bottom Sheet Modal for Region Details */}
-      {inspectHub && inspectEvents.length > 0 && (
+      {isMobileDrawerOpen && inspectHub && inspectEvents.length > 0 && (
         <>
           {/* Backdrop for mobile */}
           <div
-            className="fixed inset-0 bg-void/80 backdrop-blur-sm z-40 sm:hidden animate-in fade-in duration-200"
-            onClick={() => {
-              setActiveCardHubId(null);
-            }}
+            className="fixed inset-0 bg-void/80 backdrop-blur-sm z-50 sm:hidden animate-in fade-in duration-200"
+            onClick={handleCloseInspect}
           />
 
           {/* Bottom Sheet Modal */}
@@ -520,27 +570,24 @@ export default function WorldMapEvents({
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={() => {
-                    onSelectRegion?.(inspectHub.id);
-                    setActiveCardHubId(null);
-                    const el = document.getElementById("selected-events-grid");
-                    el?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="rounded-lg bg-signal/15 border border-signal/40 px-2.5 py-1.5 font-mono text-[11px] text-signal font-semibold hover:bg-signal hover:text-void transition-colors"
+                  type="button"
+                  onClick={() => handleViewBelow(inspectHub.id)}
+                  className="rounded-xl bg-signal/15 border border-signal/40 px-3 py-1.5 font-mono text-[11px] text-signal font-bold hover:bg-signal hover:text-void transition-colors"
                 >
                   View Below ↓
                 </button>
                 <button
-                  onClick={() => {
-                    setActiveCardHubId(null);
-                    setHoveredHubId(null);
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseInspect();
                   }}
-                  className="rounded-lg border border-line bg-panel p-1.5 text-muted hover:text-text transition-colors"
-                  aria-label="Close"
+                  className="rounded-xl border border-line bg-panel p-2 text-muted hover:text-text hover:bg-white/10 active:scale-95 transition-all"
+                  aria-label="Close dialog"
                 >
-                  <span className="block w-4 h-4 text-center leading-4 text-xs">✕</span>
+                  <span className="block w-4 h-4 text-center leading-4 text-sm font-bold">✕</span>
                 </button>
               </div>
             </div>
@@ -610,13 +657,9 @@ export default function WorldMapEvents({
             {/* Bottom action bar */}
             <div className="mt-3 pt-2.5 border-t border-line/60">
               <button
-                onClick={() => {
-                  onSelectRegion?.(inspectHub.id);
-                  setActiveCardHubId(null);
-                  const el = document.getElementById("selected-events-grid");
-                  el?.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="w-full rounded-xl bg-signal py-2.5 font-mono text-xs font-bold text-void hover:bg-signalDim transition-all shadow-md text-center"
+                type="button"
+                onClick={() => handleViewBelow(inspectHub.id)}
+                className="w-full rounded-xl bg-signal py-3 font-mono text-xs font-bold text-void hover:bg-signalDim active:scale-98 transition-all shadow-md text-center"
               >
                 Scroll to {inspectEvents.length} events in grid below ↓
               </button>
@@ -640,7 +683,7 @@ export default function WorldMapEvents({
             <button
               onClick={() => {
                 onSelectRegion?.(null);
-                setActiveCardHubId(null);
+                handleCloseInspect();
               }}
               className="font-mono text-xs text-signal underline hover:text-signalDim self-start sm:self-auto"
             >
