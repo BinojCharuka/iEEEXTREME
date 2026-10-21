@@ -5,7 +5,7 @@ export type TeamMember = {
 };
 
 export const team: TeamMember[] = [
-  { name: "Muniba Faheem", role: "Lead" },
-  { name: "Kavindu Ranasinghe", role: "Co-Lead" },
-  { name: "Alvi Choundry", role: "Co-Lead" }
+  { name: "Muniba Faheem", role: "Lead", avatar: "/team/muniba.webp" },
+  { name: "Kavindu Ranasinghe", role: "Co-Lead", avatar: "/team/kavindu.webp" },
+  { name: "Alvi Choundry", role: "Co-Lead", avatar: "/team/alvi.webp" }
 ];
